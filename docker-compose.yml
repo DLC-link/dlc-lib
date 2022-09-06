@@ -1,0 +1,27 @@
+version: '3.4'
+services:
+  ### BITCOIND
+  bitcoind:
+    image: ruimarinho/bitcoin-core:0.20.0
+    command: |
+      -conf=/config/default.conf
+      -printtoconsole
+      -regtest
+    ports:
+      # regtest ports
+      - 18443:18443
+      - 18444:18444
+    volumes:
+      - bitcoind-data:/home/bitcoin/.bitcoin
+      - ./services/bitcoind/config:/config
+  electrs:
+    image: electrs
+    command: |
+      sh -c "electrs -vv --daemon-rpc-addr bitcoind:18443 --daemon-dir /home/bitcoin/.bitcoin --network regtest --http-addr 0.0.0.0:3004"
+    volumes:
+      - bitcoind-data:/home/bitcoin/.bitcoin
+    ports:
+      - 3004:3004
+
+volumes:
+  bitcoind-data:

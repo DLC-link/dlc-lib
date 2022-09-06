@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "outDir": "./src/",
+    "noImplicitAny": true,
+    "module": "es6",
+    "target": "es5",
+    "jsx": "react",
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "Node",
+    "declaration": true
+  },
+  "root": ["./ts_src"],
+  "include": ["ts_src/**/*.ts"],
+  "exclude": ["ts_src/**/*.test.ts", "./node_modules/**/*"]
+}

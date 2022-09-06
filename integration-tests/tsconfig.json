@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "commonjs",
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true
+  },
+  "types": ["node", "jest"],
+  "include": ["./**/*.ts", "../ts_src/**/*.ts"],
+  "exclude": ["../ts_src/**/*.test.ts", "../node_modules/**/*"]
+}

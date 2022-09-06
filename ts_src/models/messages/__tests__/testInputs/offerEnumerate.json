@@ -1,0 +1,75 @@
+{
+  "protocolVersion": 1,
+  "contractFlags": 0,
+  "chainHash": "06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f",
+  "temporaryContractId": "50a38b0f6bc6627a330f93ef62b1685e45d390f0c2e008784a494ae3f77e0475",
+  "contractInfo": {
+    "singleContractInfo": {
+      "totalCollateral": 200000000,
+      "contractInfo": {
+        "contractDescriptor": {
+          "enumeratedContractDescriptor": {
+            "payouts": [
+              {
+                "outcome": "a",
+                "offerPayout": 200000000
+              },
+              {
+                "outcome": "b",
+                "offerPayout": 0
+              },
+              {
+                "outcome": "c",
+                "offerPayout": 200000000
+              },
+              {
+                "outcome": "d",
+                "offerPayout": 0
+              }
+            ]
+          }
+        },
+        "oracleInfo": {
+          "single": {
+            "oracleAnnouncement": {
+              "announcementSignature": "288a4ac72f3f627ceecf61753f94c437f9e761950ce1dd4ad787cdf6f525ce11b6cea81689ad41511d4366db5fb591b40864f59c4e9e0cf2c7dac89224d98c55",
+              "oraclePublicKey": "3d563caec479d618bad3cb0e844f57dcd977f23e5d6d84e1e3be51bb33133cb0",
+              "oracleEvent": {
+                "oracleNonces": [
+                  "5c1785f8ab4273d56ac67d4b0429c40107cec5875246a2b68872792c2096e3a7"
+                ],
+                "eventMaturityEpoch": 1623133104,
+                "eventDescriptor": {
+                  "enumEvent": {
+                    "outcomes": ["a", "b", "c", "d"]
+                  }
+                },
+                "eventId": "Test"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "fundingPubkey": "0284014ca41f49f56553b01d7da4f6c19afed76ac5d2fecde0bab6a878b57092ed",
+  "payoutSpk": "00148ac3370f8bb5840112756ec4a48d4f417c958b68",
+  "payoutSerialId": 4891480442309882974,
+  "offerCollateral": 100000000,
+  "fundingInputs": [
+    {
+      "inputSerialId": 5330895180221467292,
+      "prevTx": "020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03520101ffffffff0200f2052a01000000160014dbd4ce44e8f4db05f35ca1c16378c56017b0582b0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+      "prevTxVout": 0,
+      "sequence": 4294967295,
+      "maxWitnessLen": 107,
+      "redeemScript": ""
+    }
+  ],
+  "changeSpk": "0014b742726c4817779988527052274d2a6f95c2cfb1",
+  "changeSerialId": 15716098011649384884,
+  "fundOutputSerialId": 9046284180399923145,
+  "feeRatePerVb": 2,
+  "cetLocktime": 1623133104,
+  "refundLocktime": 1623737904
+}
