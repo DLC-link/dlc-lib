@@ -45,7 +45,7 @@ cargo run --release --bin electrs -- -vvvv --daemon-dir ~/.bitcoin --network reg
 For this demo, you need to have a version of bitcoind running. This library currently requires v21 or before.
 
 ```bash
-docker run --env BITCOIN_DATA=/Users/jessesmith/.bitcoin --rm -d -p 18443:18443 --name bitcoin-node --volume /Users/jessesmith/.bitcoin/ ruimarinho/bitcoin-core:0.20.0 \
+docker run --env BITCOIN_DATA=/Users/jessesmith/.bitcoin -d -p 18443:18443 --name bitcoin-node --volume /Users/jessesmith/.bitcoin/ ruimarinho/bitcoin-core:0.20.0 \
   -datadir=/Users/jessesmith/.bitcoin/ \
   -regtest=1 \
   -fallbackfee=0.0002 \
