@@ -20,6 +20,16 @@ https://github.com/p2pderivatives/cfd-dlc-js-wasm/commits/es6-module
 The library is written with TypeScript.
 To build the `.js` file run `npm run build`.
 
+This is required during import into other projects.
+
+## Importing into your wallet
+
+As of now, this package is not released on npm. Please download and compile this locally, and import it into your wallet project like this.
+
+"dlc-lib": "file:../dlc-lib",
+
+# Development
+
 ## Using docker
 You can try using the included docker-compose file, but it seems to have problems when using Apple Silicon
 
