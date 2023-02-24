@@ -8,12 +8,16 @@ npm install
 ```
 
 # Using Wasm
-Much of the heavy lifting of this package is actually performed under-the-hood by the embedded wasm files generaged in this repo https://github.com/p2pderivatives/cfd-js-wasm and copied into this package. If desired we could be importing that library and building it along with this repo, so the source code is more clearly visible. However that requires tools for compiling wasm which is more particular than JS projects. 
+Much of the heavy lifting of this package is actually performed under-the-hood by the embedded wasm files generaged in this repo https://github.com/p2pderivatives/cfd-js-wasm and copied into this package. If desired we could be importing that library and building it along with this repo, so the source code is more clearly visible. However that requires tools for compiling wasm which is more particular than JS projects.
 
 To fully understand the functionality of this project, looking at the cfd-js-wasm library is needed.
 
 This is the commit/version of the cfd-js-wasm package used in this project.
 https://github.com/p2pderivatives/cfd-dlc-js-wasm/commits/es6-module
+
+The link between cfd-dlc and this dlc-lib repo is here: https://github.com/p2pderivatives/cfd-dlc-js-wasm/blob/es6-module/external/CMakeLists.txt#L49
+
+The branch of cfd-dlc being used to build the wasm is here: https://github.com/p2pderivatives/cfd-dlc/compare/chore/update-cfd-and-match-fee-computation
 
 # Building
 
@@ -40,13 +44,13 @@ docker-compose up # don't do this anymore cause we're running bitcoind and elect
 
 ## Electrs
 Requires:
-- [docker](https://docs.docker.com/get-docker/) 
+- [docker](https://docs.docker.com/get-docker/)
 - [docker-compose](https://docs.docker.com/compose/install/)
 - [Rust and cargo](https://www.rust-lang.org/tools/install)
 
 Build an electrs image (e.g. https://github.com/cryptogarageinc/electrs) and tag it with the name `electrs`.
 
-Run electrs with this 
+Run electrs with this
 ```bash
 cargo run --release --bin electrs -- -vvvv --daemon-dir ~/.bitcoin --network regtest --http-addr 0.0.0.0:3004 --cookie="testuser:lq6zequb-gYTdF2_ZEUtr8ywTXzLYtknzWU4nV8uVoo="
 ```
@@ -69,9 +73,9 @@ docker run --env BITCOIN_DATA=/Users/jessesmith/.bitcoin -d -p 18443:18443 --nam
 bitcoin-cli -rpcuser=testuser -rpcpassword=lq6zequb-gYTdF2_ZEUtr8ywTXzLYtknzWU4nV8uVoo= stop # to stop bitcoind
 ```
 
-test with 
+test with
 ```bash
-bitcoin-cli -rpcuser="testuser" -rpcpassword="lq6zequb-gYTdF2_ZEUtr8ywTXzLYtknzWU4nV8uVoo=" -regtest -rpcwallet=alice sendtoaddress "bcrt1q942lmhjxnllvn2frxp4g3ymwckt5df5p7hjz60" 3 
+bitcoin-cli -rpcuser="testuser" -rpcpassword="lq6zequb-gYTdF2_ZEUtr8ywTXzLYtknzWU4nV8uVoo=" -regtest -rpcwallet=alice sendtoaddress "bcrt1q942lmhjxnllvn2frxp4g3ymwckt5df5p7hjz60" 3
 ```
 
 ## Running things
