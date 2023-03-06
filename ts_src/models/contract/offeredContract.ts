@@ -21,9 +21,7 @@ export interface OfferedContract extends StatelessContract<BaseContract> {
 }
 
 export function fromOfferMessage(offerMessage: OfferMessage): OfferedContract {
-  const contractMaturityBound =
-    offerMessage.contractInfo.contractInfo.oracleInfo.oracleAnnouncement
-      .oracleEvent.eventMaturityEpoch
+  const contractMaturityBound = offerMessage.cetLocktime
   const inputs: TxInputInfo[] = []
   let inputAmount = 0
   for (const input of offerMessage.fundingInputs) {
