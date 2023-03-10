@@ -61,7 +61,13 @@ export class BitcoinJSWallet implements Wallet {
     amount: number,
     feeRatePerVByte: number
   ): Promise<Utxo[]> {
-    const utxos = await this.storage.getUtxos()
+    const address = await this.getNewAddress();
+    const utxos = await this.blockchain.getUtxosForAddress(address)
+    
+    console.log(
+      'dlc-lib/bitcoinJsWallet.ts/getUtxosForAmount/this.storage.getUtxos | UTXOs: ',
+      utxos
+    )
 
     const { inputs } = coinselect(
       utxos.map((x) => {

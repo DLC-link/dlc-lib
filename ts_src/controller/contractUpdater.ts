@@ -66,8 +66,6 @@ interface SigParams {
   acceptParams: PartyParams
 }
 
-const notEnoughUtxoErrorMessage = 'Not enough UTXO for collateral and fees.'
-
 export class ContractUpdater {
   constructor(readonly wallet: Wallet, readonly blockchain: Blockchain) {}
 
@@ -117,6 +115,10 @@ export class ContractUpdater {
   }
 
   async toAcceptContract(contract: OfferedContract): Promise<AcceptedContract> {
+    console.log(
+      'dlc-lib/contractUpdater.ts/toAcceptContract | Contract: ',
+      contract
+    )
     let acceptParams = undefined
     const acceptFundingInputsInfo: FundingInput[] = []
     try {
@@ -129,8 +131,17 @@ export class ContractUpdater {
         ownCollateral + ownFee,
         contract.feeRatePerVByte
       )
+      console.log(
+        'dlc-lib/contractUpdater.ts/toAcceptContract/this.wallet.getUtxosForAmount | UTXOs: ',
+        utxos
+      )
 
       acceptParams = await this.getPartyInputs(utxos, ownCollateral)
+
+      console.log(
+        'dlc-lib/contractUpdater.ts/toAcceptContract/this.getPartyInputs | Accept Params: ',
+        acceptParams
+      )
 
       for (const input of acceptParams.inputs) {
         const prevTx = await this.blockchain.getTransaction(input.outpoint.txid)
@@ -143,8 +154,8 @@ export class ContractUpdater {
           redeemScript: input.redeemScript,
         })
       }
-    } catch (e) {
-      throw new DlcError(notEnoughUtxoErrorMessage)
+    } catch (error) {
+      throw error
     }
 
     const payouts: Payout[] = getContractPayouts(contract.contractInfo)

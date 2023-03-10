@@ -1,5 +1,6 @@
 import { Blockchain } from './blockchain'
-import { ContractQuery, ContractRepository, WalletStorage } from './repository'
-import { Wallet } from './wallet'
+import { ContractQuery, ContractRepository } from './repository'
+import Signer
+import { DlcAPI } from './dlcAPI'
 
-export { Blockchain, ContractQuery, ContractRepository, Wallet, WalletStorage }
+export { Blockchain, ContractQuery, ContractRepository, Wallet, DlcAPI }
