@@ -79,6 +79,7 @@ export class ContractUpdater {
     const fundPubkey = btcPublicKey
     const changeAddress = btcAddress
     const payoutAddress = btcAddress
+    console.log('btcNetwork inside PartyInputs: ', btcNetwork)
     const changeScriptPubkey = address
       .toOutputScript(changeAddress, btcNetwork)
       .toString('hex')
