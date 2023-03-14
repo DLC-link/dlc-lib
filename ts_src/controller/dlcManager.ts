@@ -1,4 +1,4 @@
-import { Transaction } from 'bitcoinjs-lib'
+import { Network, Transaction } from 'bitcoinjs-lib'
 import { DlcError } from '../errors/dlcError'
 import { ContractRepository } from '../interfaces/repository'
 import {
@@ -14,7 +14,6 @@ import { fromOfferMessage } from '../models/contract/offeredContract'
 import { OfferMessage, SignMessage } from '../models/messages'
 import { ContractUpdater, verifyContractSignatures } from './contractUpdater'
 
-const notEnoughUtxoErrorMessage = 'Not enough UTXO for collateral and fees.'
 export class DlcManager {
   private readonly _contractUpdater: ContractUpdater
   private readonly _dlcRepository: ContractRepository
@@ -34,13 +33,23 @@ export class DlcManager {
     return contract
   }
 
-  async acceptOffer(contractId: string): Promise<AcceptedContract> {
+  async acceptOffer(
+    contractId: string,
+    btcAddress: string,
+    btcPublicKey: string,
+    btcPrivateKey: string,
+    btcNetwork: Network
+  ): Promise<AcceptedContract> {
     const offeredContract = (await this.tryGetContractOrThrow(contractId, [
       ContractState.Offered,
     ])) as OfferedContract
 
     const acceptedContract = await this._contractUpdater.toAcceptContract(
-      offeredContract
+      offeredContract,
+      btcAddress,
+      btcPublicKey,
+      btcPrivateKey,
+      btcNetwork
     )
 
     await this._dlcRepository.updateContract(acceptedContract)

@@ -10,7 +10,6 @@ import {
   AcceptedContract,
   BroadcastContract,
   FailedContract,
-  isContractOfState,
   OfferedContract,
   RejectedContract,
   SignedContract,
@@ -38,20 +37,21 @@ import {
   isNumericOutcomeContractDescriptor,
   NumericOutcomeContractDescriptor,
 } from '../models/messages/contract'
-import { Transaction, address, script } from 'bitcoinjs-lib'
+import { Transaction, address, script, Network } from 'bitcoinjs-lib'
 import { ECPairFactory, ECPairAPI } from 'ecpair'
 import { computeContractId } from '../models/contract/acceptedContract'
 import { getSerialId } from '../utils/random'
 import { FundingSignature } from '../models/messages/signMessage'
 import { SerialIdOrderer } from '../utils/serialIdOrderer'
 import { Blockchain } from '../interfaces/blockchain'
-import { Wallet } from '../interfaces/wallet'
+import { Signer } from '../interfaces/signer'
 import {
   isDigitDecompositionEventDescriptor,
   isEnumeratedEventDescriptor,
   OracleInfo,
 } from '../models/oracle'
 import * as tinysecp256k1 from 'tiny-secp256k1'
+import coinselect from 'coinselect'
 
 const cfddlcjs = cfddlcjsInit.getCfddlc()
 
@@ -67,21 +67,23 @@ interface SigParams {
 }
 
 export class ContractUpdater {
-  constructor(readonly wallet: Wallet, readonly blockchain: Blockchain) {}
+  constructor(readonly signer: Signer, readonly blockchain: Blockchain) {}
 
   private async getPartyInputs(
     utxos: ReadonlyArray<Utxo>,
-    collateral: number
+    collateral: number,
+    btcAddress: string,
+    btcPublicKey: string,
+    btcNetwork: Network
   ): Promise<PartyParams> {
-    const fundPubkey = await this.wallet.getNewPublicKey()
-    const changeAddress = await this.wallet.getNewAddress()
-    const payoutAddress = await this.wallet.getNewAddress()
-    // TODO(tibo): get network param from wallet
+    const fundPubkey = btcPublicKey
+    const changeAddress = btcAddress
+    const payoutAddress = btcAddress
     const changeScriptPubkey = address
-      .toOutputScript(changeAddress, this.wallet.getNetwork())
+      .toOutputScript(changeAddress, btcNetwork)
       .toString('hex')
     const payoutScriptPubkey = address
-      .toOutputScript(payoutAddress, this.wallet.getNetwork())
+      .toOutputScript(payoutAddress, btcNetwork)
       .toString('hex')
 
     let inputAmount = 0
@@ -114,7 +116,43 @@ export class ContractUpdater {
     }
   }
 
-  async toAcceptContract(contract: OfferedContract): Promise<AcceptedContract> {
+  private async getUtxosForAmount(
+    amount: number,
+    feeRatePerVByte: number,
+    utxos: Utxo[]
+  ): Promise<Utxo[]> {
+    const { inputs } = coinselect(
+      utxos.map((x) => {
+        return { ...x, value: x.amount }
+      }),
+      [{ value: amount }],
+      feeRatePerVByte
+    )
+
+    if (!inputs || inputs.length == 0) {
+      throw new DlcError('Not enough UTXOs for amount.')
+    }
+
+    const outUtxos: Utxo[] = []
+
+    for (const input of inputs) {
+      const i = utxos.findIndex((x) => x.amount == input.value)
+      outUtxos.push({
+        ...utxos.splice(i, 1)[0],
+        reserved: true,
+      })
+    }
+
+    return outUtxos
+  }
+
+  async toAcceptContract(
+    contract: OfferedContract,
+    btcAddress: string,
+    btcPublicKey: string,
+    btcPrivateKey: string,
+    btcNetwork: Network
+  ): Promise<AcceptedContract> {
     console.log(
       'dlc-lib/contractUpdater.ts/toAcceptContract | Contract: ',
       contract
@@ -123,20 +161,28 @@ export class ContractUpdater {
     const acceptFundingInputsInfo: FundingInput[] = []
     try {
       const estimatedInputs = 2
-      let utxos = []
       const ownCollateral =
         contract.contractInfo.totalCollateral - contract.offerParams.collateral
       const ownFee = getOwnFee(contract.feeRatePerVByte, estimatedInputs)
-      utxos = await this.wallet.getUtxosForAmount(
+      const utxos = await this.blockchain.getUtxosForAddress(btcAddress)
+      const outUtxos = await this.getUtxosForAmount(
         ownCollateral + ownFee,
-        contract.feeRatePerVByte
-      )
-      console.log(
-        'dlc-lib/contractUpdater.ts/toAcceptContract/this.wallet.getUtxosForAmount | UTXOs: ',
+        contract.feeRatePerVByte,
         utxos
       )
 
-      acceptParams = await this.getPartyInputs(utxos, ownCollateral)
+      console.log(
+        'dlc-lib/contractUpdater.ts/toAcceptContract/this.signer.getUtxosForAmount | UTXOs for amount: ',
+        outUtxos
+      )
+
+      acceptParams = await this.getPartyInputs(
+        outUtxos,
+        ownCollateral,
+        btcAddress,
+        btcPublicKey,
+        btcNetwork
+      )
 
       console.log(
         'dlc-lib/contractUpdater.ts/toAcceptContract/this.getPartyInputs | Accept Params: ',
@@ -145,6 +191,10 @@ export class ContractUpdater {
 
       for (const input of acceptParams.inputs) {
         const prevTx = await this.blockchain.getTransaction(input.outpoint.txid)
+        console.log(
+          'dlc-lib/contractUpdater.ts/toAcceptContract/this.blockcahin.getTransaction | prevTx: ',
+          prevTx
+        )
         acceptFundingInputsInfo.push({
           inputSerialId: input.serialId,
           prevTx,
@@ -154,17 +204,23 @@ export class ContractUpdater {
           redeemScript: input.redeemScript,
         })
       }
+      console.log(
+        'dlc-lib/contractUpdater.ts/toAcceptContract/acceptFundingInputsInfo: ',
+        acceptFundingInputsInfo
+      )
     } catch (error) {
       throw error
     }
 
     const payouts: Payout[] = getContractPayouts(contract.contractInfo)
+    console.log('dlc-lib/contractUpdater.ts/toAcceptContract | Payouts: ', payouts)
 
     const dlcTransactions = await createDlcTransactions(
       contract,
       acceptParams,
       payouts
     )
+    console.log('dlc-lib/contractUpdater.ts/toAcceptContract | dlcTransactions: ', dlcTransactions)
 
     const fundTxHex = dlcTransactions.fundTxHex
     const fundTransaction = Transaction.fromHex(fundTxHex)
@@ -175,9 +231,8 @@ export class ContractUpdater {
     const cetsHex = dlcTransactions.cetsHex
     const fundingScriptPubkey = dlcTransactions.fundingScriptPubkey
 
-    const fundPrivkey = await this.wallet.getPrivateKeyForPublicKey(
-      acceptParams.fundPubkey
-    )
+    const fundPrivkey = btcPrivateKey
+
     const sigParams: SigParams = {
       fundTxId,
       fundTxOutAmount,
@@ -186,24 +241,35 @@ export class ContractUpdater {
       fundPrivkey,
       offerParams: contract.offerParams,
     }
+    console.log('')
     const [outcomeInfo, acceptAdaptorSignatures] = await getOutcomesInfo(
       contract.contractInfo,
       sigParams
     )
+    console.log('Outcome Info: ', outcomeInfo)
 
-    const acceptRefundSignature = await this.wallet.getDerTxSignatureFromPubkey(
+    console.log('Transaction.fromHex(dlcTransactions.refundTxHex): ', Transaction.fromHex(dlcTransactions.refundTxHex))
+    console.log('sigParams.fundTxOutAmount: ', sigParams.fundTxOutAmount)
+    console.log('acceptParams.fundPubkey: ', acceptParams.fundPubkey)
+    console.log('fundingScriptPubkey: ', fundingScriptPubkey)
+
+    const acceptRefundSignature = await this.signer.getDerTxSignatureFromPubkey(
       Transaction.fromHex(dlcTransactions.refundTxHex),
       0,
       sigParams.fundTxOutAmount,
-      acceptParams.fundPubkey,
-      fundingScriptPubkey
+      fundingScriptPubkey,
+      btcPrivateKey
     )
+
+    console.log('dlc-lib/contractUpdater.ts/toAcceptContract | acceptRefundSignature: ', acceptRefundSignature)
 
     const id = computeContractId(
       fundTxId,
       dlcTransactions.fundVout,
       contract.temporaryContractId
     )
+
+    console.log('dlc-lib/contractUpdater.ts/toAcceptContract | id: ', id)
 
     return {
       ...contract,
@@ -240,6 +306,7 @@ export class ContractUpdater {
   }
 
   async toBroadcast(contract: SignedContract): Promise<BroadcastContract> {
+    console.log('Broadcasting!')
     const fundTxHex = contract.dlcTransactions.fund
 
     const inputOrderer = new SerialIdOrderer(
@@ -259,7 +326,7 @@ export class ContractUpdater {
         contract.acceptParams.inputs[i].serialId
       )
 
-      await this.wallet.signP2WPKHTxInput(
+      await this.signer.signP2WPKHTxInput(
         fundTx,
         index,
         input.amount,
@@ -286,11 +353,6 @@ export class ContractUpdater {
     contract: OfferedContract | AcceptedContract | SignedContract,
     reason?: string
   ): Promise<RejectedContract> {
-    if (
-      isContractOfState(contract, ContractState.Accepted, ContractState.Signed)
-    ) {
-      await this.unlockUtxos(contract)
-    }
     return {
       ...contract,
       state: ContractState.Rejected,
@@ -302,21 +364,10 @@ export class ContractUpdater {
     contract: AcceptedContract | SignedContract,
     reason: string
   ): Promise<FailedContract> {
-    const states = [ContractState.Offered, ContractState.Accepted] as const
-    if (isContractOfState(contract, ...states)) await this.unlockUtxos(contract)
     return {
       ...contract,
       state: ContractState.Failed,
       reason,
-    }
-  }
-
-  private async unlockUtxos(
-    contract: AcceptedContract | SignedContract
-  ): Promise<void> {
-    const inputs = contract.acceptParams.inputs
-    for (const input of inputs) {
-      await this.wallet.unreserveUtxo(input.outpoint.txid, input.outpoint.vout)
     }
   }
 }
@@ -428,6 +479,22 @@ async function getDecompositionOutcomeInfo(
   oracleInfo: OracleInfo,
   sigParams: SigParams
 ): Promise<[DigitTrie<RangeInfo>, string[]]> {
+  console.log(
+    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | descriptor: ',
+    descriptor
+  )
+  console.log(
+    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | totalCollateral: ',
+    totalCollateral
+  )
+  console.log(
+    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | oracleInfo: ',
+    oracleInfo
+  )
+  console.log(
+    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | sigParams: ',
+    sigParams
+  )
   const outcomeTrie: DigitTrie<RangeInfo> = { root: { edges: [] } }
   const adaptorPairs: string[] = []
   let adaptorCounter = 0
@@ -435,6 +502,7 @@ async function getDecompositionOutcomeInfo(
     descriptor,
     totalCollateral
   )
+  console.log('dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | rangeOutcomes: ', rangeOutcomes)
   const eventDescriptor =
     oracleInfo.oracleAnnouncement.oracleEvent.eventDescriptor
   if (!isDigitDecompositionEventDescriptor(eventDescriptor)) {
@@ -468,6 +536,8 @@ async function getDecompositionOutcomeInfo(
       trieInsert(outcomeTrie, groups[j], rangeInfo)
     }
   }
+  console.log('dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | Outcome Trie:', outcomeTrie)
+  console.log('dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | Adaptor Pairs:', adaptorPairs)
   return [outcomeTrie, adaptorPairs]
 }
 
@@ -501,6 +571,7 @@ async function getOutcomesInfo(
   contractInfo: ContractInfo,
   sigParams: SigParams
 ): Promise<[DigitTrie<RangeInfo> | string[], string[]]> {
+  console.log('getOutcomesInfo')
   if (
     isEnumeratedContractDescriptor(contractInfo.contractInfo.contractDescriptor)
   ) {

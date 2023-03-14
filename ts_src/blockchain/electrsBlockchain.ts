@@ -51,17 +51,6 @@ export class ElectrsBlockchain implements Blockchain {
     }
     throw new Error('Could not get Utxos for address')
   }
-
-  async isOutputSpent(txid: string, vout: number): Promise<boolean> {
-    const url = this.getUrl(`tx/${txid}/outspend/${vout}`)
-    const spentResp = await fetch(url)
-    if (spentResp.status == 200) {
-      const data = (await spentResp.json()) as SpendResp
-      return data.status
-    }
-
-    throw new Error('Could not get output status')
-  }
 }
 
 interface UtxoResp {

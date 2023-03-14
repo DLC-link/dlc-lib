@@ -1,7 +1,6 @@
-import { Network, Transaction } from 'bitcoinjs-lib'
-import { Utxo } from '../models/utxo'
+import { Transaction } from 'bitcoinjs-lib'
 
-// Interface providing wallet functionalities
+// Interface providing signing functionalities
 export interface Signer {
   // Returns a DER encoded signature for the specified input using the private
   // key associated with the given public key.
@@ -9,14 +8,14 @@ export interface Signer {
     tx: Transaction,
     inputIndex: number,
     inputAmount: number,
-    pubkey: string,
-    outputScript: string
+    outputScript: string,
+    btcPrivateKey: string
   ): Promise<string>
   // Creates a signature for the given input and fills the transaction input witness.
   signP2WPKHTxInput(
     tx: Transaction,
     inputIndex: number,
     inputAmount: number,
-    inputAddress: string
+    btcPrivateKey: string
   ): Promise<void>
 }

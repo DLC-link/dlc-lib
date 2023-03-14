@@ -38,12 +38,16 @@ export function payoutFunctionToRangePayout(
   totalCollateral: number,
   roundingIntervals: RoundingIntervals
 ): RangePayout[] {
+  console.log('Payout Function: ', payoutFunction)
+  console.log('Total Collateral: ', totalCollateral)
+  console.log('Rounding Intervals: ', roundingIntervals)
   const rangePayouts: RangePayout[] = []
   const nbPieces = payoutFunction.payoutFunctionPieces.length
   for (let i = 0; i < payoutFunction.payoutFunctionPieces.length; i++) {
     // We transform so that we end up with a set of points that have both
     // correct left and right ends.
     const piece = payoutFunction.payoutFunctionPieces[i]
+    console.log('Piece: ', piece)
 
     const lastPoint =
       i == nbPieces - 1
