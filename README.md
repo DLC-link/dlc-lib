@@ -110,3 +110,18 @@ __Integration tests are not working due to cfd-dlc-js being compiled as a ES6 mo
 ```bash
 npm run lint
 ```
+
+## Debugging
+During development it's common to get an error of the form `Secp256k1 error failed to verify adaptor signature`.
+
+The data (messages / contracts, txs, etc) need to match for the two parties of the DLC, and during development it's common something might change and cause one of the verification steps (`verify_accepted_and_sign_contract` or `verify_signed_contract`) to fail with an error like this.
+
+In this case, it is recommended to run the Rust code in a debugger and put breakpoints inside these verify functions, and perhaps even in the sub-functions within those. This will allow you to see the details of the Rust side of the DLC contract.
+
+Then, the other wallet should print out it's values, and they can be compared. Consider comparing the following params `locktime`, `value` of all the bitcoin parts, like inputs for the fund and refund transactions, as well as the CETs inside the dlcTransactions object.
+
+If the object your trying to compare is in the format of a raw bitcoin transaction, you can copy it and use bitcoin-cli to debug as in the following example:
+
+```sh
+bitcoin-cli -regtest -rpcconnect=localhost:28443 -rpcuser="devnet2" -rpcpassword="devnet2" -rpcwallet=alice decoderawtransaction "020000000190aaa95257f1d03868d6ea303abc1a15f347a2df7c03944d68909d727a21bfab0100000000feffffff0200000000000000001600143543c49063defe7f7cde297a9dc14b3a1711241f405dc600000000001600149d4363a973c66cd3481482ca28b1e271d15bf765853a0900
+```
