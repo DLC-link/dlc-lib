@@ -16,24 +16,29 @@ export class DlcSigner implements Signer {
     inputAmount: number,
     btcPrivateKey: string
   ): Promise<void> {
+    console.log('SIGNING')
     const ecpair = ECPair.fromPrivateKey(Buffer.from(btcPrivateKey, 'hex'))
+    console.log('ECPAIR:', ecpair)
     const outputScript = payments.p2pkh({ pubkey: ecpair.publicKey }).output
-
+    console.log('OUTPUTSCRIPT: ', outputScript)
     if (!outputScript) {
+      console.error('ITT A HIBA!')
       throw new UnexpectedError()
     }
-
+ console.log('1')
     const hash = tx.hashForWitnessV0(
       inputIndex,
       outputScript,
       inputAmount,
       0x01
     )
+    console.log('2')
     const signature = ecpair.sign(hash, true)
     tx.ins[inputIndex].witness = [
       script.signature.encode(signature, 0x01),
       ecpair.publicKey,
     ]
+    console.log('3')
   }
 
   async getDerTxSignatureFromPubkey(
@@ -41,7 +46,7 @@ export class DlcSigner implements Signer {
     inputIndex: number,
     inputAmount: number,
     outputScript: string,
-    btcPrivateKey: string,
+    btcPrivateKey: string
   ): Promise<string> {
     const hash = tx.hashForWitnessV0(
       inputIndex,

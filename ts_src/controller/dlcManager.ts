@@ -12,6 +12,7 @@ import { AcceptedContract } from '../models/contract/acceptedContract'
 import { ContractState } from '../models/contract/contract'
 import { fromOfferMessage } from '../models/contract/offeredContract'
 import { OfferMessage, SignMessage } from '../models/messages'
+import { NetworkType } from '../types/networkTypes'
 import { ContractUpdater, verifyContractSignatures } from './contractUpdater'
 
 export class DlcManager {
@@ -38,7 +39,7 @@ export class DlcManager {
     btcAddress: string,
     btcPublicKey: string,
     btcPrivateKey: string,
-    btcNetwork: Network
+    btcNetwork: NetworkType
   ): Promise<AcceptedContract> {
     const offeredContract = (await this.tryGetContractOrThrow(contractId, [
       ContractState.Offered,
@@ -57,10 +58,17 @@ export class DlcManager {
     return acceptedContract
   }
 
-  async onSignMessage(signMessage: SignMessage): Promise<BroadcastContract> {
+  async onSignMessage(
+    signMessage: SignMessage,
+    btcPrivateKey: string,
+    btcNetwork: NetworkType
+  ): Promise<BroadcastContract> {
+    console.log('inside onSignMessage')
     const contract = (await this.tryGetContractOrThrow(signMessage.contractId, [
       ContractState.Accepted,
     ])) as AcceptedContract
+
+    console.log('onSignMessage Contract: ', contract)
 
     const signedContract = await this._contractUpdater.toSignedContract(
       contract,
@@ -71,16 +79,23 @@ export class DlcManager {
       signMessage.fundingSignatures.fundingSignatures
     )
 
+    console.log('onSignMessage signedContract: ', signedContract)
+
     const fundTx = Transaction.fromHex(signedContract.dlcTransactions.fund)
+
+    console.log('onSignMessage fundTx: ', fundTx)
     const fundOutputValue =
       fundTx.outs[signedContract.dlcTransactions.fundOutputIndex].value
 
+    console.log('onSignMessage fundOutputValue: ', fundOutputValue)
     if (!verifyContractSignatures(signedContract, fundOutputValue)) {
       await this.handleInvalidContract(signedContract, 'Invalid signatures')
     }
 
     const broadcastContract = await this._contractUpdater.toBroadcast(
-      signedContract
+      signedContract,
+      btcPrivateKey,
+      btcNetwork
     )
 
     await this._dlcRepository.updateContract(broadcastContract)
