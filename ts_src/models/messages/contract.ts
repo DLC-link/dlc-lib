@@ -64,13 +64,11 @@ export function getNumericOutcomeDescriptorPayouts(
   descriptor: NumericOutcomeContractDescriptor,
   totalCollateral: number
 ): Payout[] {
-  console.log('here')
   const rangePayouts = payoutFunctionToRangePayout(
     descriptor.payoutFunction,
     totalCollateral,
     descriptor.roundingIntervals
   )
-  console.log('Range Payouts: ', rangePayouts)
   return rangePayouts.map((x) => x.payout)
 }
 
@@ -94,10 +92,8 @@ export function getContractPayouts(contractInfo: ContractInfo): Payout[] {
   const descriptor = contractInfo.contractInfo.contractDescriptor
   const totalCollateral = contractInfo.totalCollateral
   if (isEnumeratedContractDescriptor(descriptor)) {
-    console.log('getEnumeratedContractDescriptorPayouts')
     return getEnumeratedContractDescriptorPayouts(descriptor, totalCollateral)
   } else {
-    console.log('getNumericOutcomeDescriptorPayouts')
     return getNumericOutcomeDescriptorPayouts(descriptor, totalCollateral)
   }
 }

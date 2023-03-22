@@ -59,35 +59,38 @@ export class DlcManager {
   }
 
   async onSignMessage(
-    signMessage: SignMessage,
+    contractId: string,
     btcPrivateKey: string,
-    btcNetwork: NetworkType
+    btcNetwork: NetworkType,
+    counterpartyWalletURL: string
   ): Promise<BroadcastContract> {
-    console.log('inside onSignMessage')
-    const contract = (await this.tryGetContractOrThrow(signMessage.contractId, [
+    const contract = (await this.tryGetContractOrThrow(contractId, [
       ContractState.Accepted,
     ])) as AcceptedContract
 
-    console.log('onSignMessage Contract: ', contract)
+    console.log('dlc-lib/dlcManager.ts/counterpartyWalletURL: ', counterpartyWalletURL)
+
+    const signMessage = JSON.parse(
+      await this._contractUpdater.toWriteAcceptMessage(
+        counterpartyWalletURL,
+        contract
+      )
+    )
 
     const signedContract = await this._contractUpdater.toSignedContract(
       contract,
       signMessage.refundSignature,
       signMessage.cetAdaptorSignatures.ecdsaAdaptorSignatures.map(
-        (x) => x.signature
+        (x: any) => x.signature
       ),
       signMessage.fundingSignatures.fundingSignatures
     )
 
-    console.log('onSignMessage signedContract: ', signedContract)
-
     const fundTx = Transaction.fromHex(signedContract.dlcTransactions.fund)
 
-    console.log('onSignMessage fundTx: ', fundTx)
     const fundOutputValue =
       fundTx.outs[signedContract.dlcTransactions.fundOutputIndex].value
 
-    console.log('onSignMessage fundOutputValue: ', fundOutputValue)
     if (!verifyContractSignatures(signedContract, fundOutputValue)) {
       await this.handleInvalidContract(signedContract, 'Invalid signatures')
     }

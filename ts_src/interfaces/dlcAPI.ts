@@ -5,7 +5,7 @@ export interface DlcAPI {
 
   processContractOffer(offer: string): Promise<AnyContract>;
 
-  processContractSign(sign: string, btcPrivateKey: string, btcNetwork: NetworkType): Promise<AnyContract>;
+  processContractSign(contractId: string, btcPrivateKey: string, btcNetwork: NetworkType, counterpartyWalletURL: string): Promise<AnyContract>;
 
   getContract(contractId: string): Promise<AnyContract>;
 

@@ -14,6 +14,7 @@ import {
   RejectedContract,
   SignedContract,
 } from '../models/contract'
+import { toAcceptMessage } from '../models/contract/acceptedContract'
 import { PartyParams } from '../models/partyParams'
 import { RangeInfo } from '../models/rangeInfo'
 import {
@@ -109,7 +110,10 @@ export class ContractUpdater {
     const payoutAddress = btcAddress
     const networkData = this.getNetworkData(btcNetwork)
 
-    console.log('Network Data: ', networkData)
+    console.log(
+      'dlc-lib/contractUpdater.ts/getPartyInputs/Network Data: ',
+      networkData
+    )
 
     const changeScriptPubkey = address
       .toOutputScript(changeAddress, networkData)
@@ -192,7 +196,7 @@ export class ContractUpdater {
     )
     let acceptParams = undefined
     const acceptFundingInputsInfo: FundingInput[] = []
-    const networkData = this.getNetworkData(btcNetwork)
+
     try {
       const estimatedInputs = 2
       const ownCollateral =
@@ -209,7 +213,7 @@ export class ContractUpdater {
       )
 
       console.log(
-        'dlc-lib/contractUpdater.ts/toAcceptContract/this.signer.getUtxosForAmount | UTXOs for amount: ',
+        'dlc-lib/contractUpdater.ts/toAcceptContract/UTXOs for amount: ',
         outUtxos
       )
 
@@ -222,7 +226,7 @@ export class ContractUpdater {
       )
 
       console.log(
-        'dlc-lib/contractUpdater.ts/toAcceptContract/this.getPartyInputs | Accept Params: ',
+        'dlc-lib/contractUpdater.ts/toAcceptContract/Accept Params: ',
         acceptParams
       )
 
@@ -232,7 +236,7 @@ export class ContractUpdater {
           btcNetwork
         )
         console.log(
-          'dlc-lib/contractUpdater.ts/toAcceptContract/this.blockcahin.getTransaction | prevTx: ',
+          'dlc-lib/contractUpdater.ts/toAcceptContract/prevTx: ',
           prevTx
         )
         acceptFundingInputsInfo.push({
@@ -253,10 +257,6 @@ export class ContractUpdater {
     }
 
     const payouts: Payout[] = getContractPayouts(contract.contractInfo)
-    console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract | Payouts: ',
-      payouts
-    )
 
     const dlcTransactions = await createDlcTransactions(
       contract,
@@ -264,7 +264,7 @@ export class ContractUpdater {
       payouts
     )
     console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract | dlcTransactions: ',
+      'dlc-lib/contractUpdater.ts/toAcceptContract/dlcTransactions: ',
       dlcTransactions
     )
 
@@ -287,20 +287,27 @@ export class ContractUpdater {
       fundPrivkey,
       offerParams: contract.offerParams,
     }
-    console.log('')
     const [outcomeInfo, acceptAdaptorSignatures] = await getOutcomesInfo(
       contract.contractInfo,
       sigParams
     )
-    console.log('Outcome Info: ', outcomeInfo)
 
     console.log(
-      'Transaction.fromHex(dlcTransactions.refundTxHex): ',
+      'dlc-lib/contractUpdater.ts/toAcceptContract/Transaction.fromHex(dlcTransactions.refundTxHex): ',
       Transaction.fromHex(dlcTransactions.refundTxHex)
     )
-    console.log('sigParams.fundTxOutAmount: ', sigParams.fundTxOutAmount)
-    console.log('acceptParams.fundPubkey: ', acceptParams.fundPubkey)
-    console.log('fundingScriptPubkey: ', fundingScriptPubkey)
+    console.log(
+      'dlc-lib/contractUpdater.ts/toAcceptContract/sigParams.fundTxOutAmount: ',
+      sigParams.fundTxOutAmount
+    )
+    console.log(
+      'dlc-lib/contractUpdater.ts/toAcceptContract/fundingScriptPubkey: ',
+      fundingScriptPubkey
+    )
+    console.log(
+      'dlc-lib/contractUpdater.ts/toAcceptContract/btcPrivateKey',
+      btcPrivateKey
+    )
 
     const acceptRefundSignature = await this.signer.getDerTxSignatureFromPubkey(
       Transaction.fromHex(dlcTransactions.refundTxHex),
@@ -357,14 +364,48 @@ export class ContractUpdater {
     }
   }
 
+  async toWriteAcceptMessage(
+    counterpartyWalletURL: string,
+    contract: AcceptedContract
+  ): Promise<string> {
+    const acceptMessage = toAcceptMessage(contract)
+    const stringifiedAcceptMessage = {
+      acceptMessage: JSON.stringify(acceptMessage),
+    }
+    console.log(
+      'dlc-lib/contractUpdater.ts/acceptMessage: ',
+      acceptMessage
+    )
+
+    try {
+      const response = await fetch(`${counterpartyWalletURL}/offer/accept`, {
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PUT',
+        mode: 'cors',
+        body: JSON.stringify(stringifiedAcceptMessage),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`)
+      }
+
+      const acceptMessageResponse = await response.json()
+      console.log(
+        'dlc-lib/contractUpdater.ts/acceptMessageResponse: ',
+        acceptMessageResponse
+      )
+      return JSON.stringify(acceptMessageResponse)
+    } catch (error) {
+      throw new DlcError(`Fetch Error: ${error}`)
+    }
+  }
+
   async toBroadcast(
     contract: SignedContract,
     btcPrivateKey: string,
     btcNetwork: NetworkType
   ): Promise<BroadcastContract> {
-    console.log('Broadcasting!')
     const fundTxHex = contract.dlcTransactions.fund
-    console.log('toBroadcast funxTxHex: ', fundTxHex)
 
     const inputOrderer = new SerialIdOrderer(
       contract.acceptParams.inputs
@@ -372,11 +413,9 @@ export class ContractUpdater {
         .concat(contract.offerParams.inputs.map((x) => x.serialId))
     )
 
-    console.log('toBroadcast inputOrderer: ', inputOrderer)
-
     const fundTx = Transaction.fromHex(fundTxHex)
 
-    console.log('toBroadcast fundTx: ', fundTx)
+    console.log('dlc-lib/contractUpdater/toBroadcast/fundTx: ', fundTx)
 
     for (let i = 0; i < contract.acceptParams.inputs.length; i++) {
       const input = contract.acceptParams.inputs[i]
@@ -394,7 +433,6 @@ export class ContractUpdater {
         btcPrivateKey
       )
     }
-    console.log('SIGNED')
 
     for (let i = 0; i < contract.offerFundTxSignatures.length; i++) {
       const signature = contract.offerFundTxSignatures[i]
@@ -405,7 +443,6 @@ export class ContractUpdater {
         Buffer.from(x.witness, 'hex')
       )
     }
-    console.log('JUST BEFORE SENDINGTRANSACTION')
 
     await this.blockchain.sendRawTransaction(fundTx.toHex(), btcNetwork)
 
@@ -542,22 +579,6 @@ async function getDecompositionOutcomeInfo(
   oracleInfo: OracleInfo,
   sigParams: SigParams
 ): Promise<[DigitTrie<RangeInfo>, string[]]> {
-  console.log(
-    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | descriptor: ',
-    descriptor
-  )
-  console.log(
-    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | totalCollateral: ',
-    totalCollateral
-  )
-  console.log(
-    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | oracleInfo: ',
-    oracleInfo
-  )
-  console.log(
-    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | sigParams: ',
-    sigParams
-  )
   const outcomeTrie: DigitTrie<RangeInfo> = { root: { edges: [] } }
   const adaptorPairs: string[] = []
   let adaptorCounter = 0
@@ -565,10 +586,7 @@ async function getDecompositionOutcomeInfo(
     descriptor,
     totalCollateral
   )
-  console.log(
-    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | rangeOutcomes: ',
-    rangeOutcomes
-  )
+
   const eventDescriptor =
     oracleInfo.oracleAnnouncement.oracleEvent.eventDescriptor
   if (!isDigitDecompositionEventDescriptor(eventDescriptor)) {
@@ -602,14 +620,6 @@ async function getDecompositionOutcomeInfo(
       trieInsert(outcomeTrie, groups[j], rangeInfo)
     }
   }
-  console.log(
-    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | Outcome Trie:',
-    outcomeTrie
-  )
-  console.log(
-    'dlc-lib/contractUpdater.ts/getDecompositionOutcomeInfo | Adaptor Pairs:',
-    adaptorPairs
-  )
   return [outcomeTrie, adaptorPairs]
 }
 
@@ -643,7 +653,6 @@ async function getOutcomesInfo(
   contractInfo: ContractInfo,
   sigParams: SigParams
 ): Promise<[DigitTrie<RangeInfo> | string[], string[]]> {
-  console.log('getOutcomesInfo')
   if (
     isEnumeratedContractDescriptor(contractInfo.contractInfo.contractDescriptor)
   ) {
