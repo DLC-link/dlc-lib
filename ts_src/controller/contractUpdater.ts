@@ -110,11 +110,6 @@ export class ContractUpdater {
     const payoutAddress = btcAddress
     const networkData = this.getNetworkData(btcNetwork)
 
-    console.log(
-      'dlc-lib/contractUpdater.ts/getPartyInputs/Network Data: ',
-      networkData
-    )
-
     const changeScriptPubkey = address
       .toOutputScript(changeAddress, networkData)
       .toString('hex')
@@ -190,10 +185,6 @@ export class ContractUpdater {
     btcPrivateKey: string,
     btcNetwork: NetworkType
   ): Promise<AcceptedContract> {
-    console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract | Contract: ',
-      contract
-    )
     let acceptParams = undefined
     const acceptFundingInputsInfo: FundingInput[] = []
 
@@ -212,11 +203,6 @@ export class ContractUpdater {
         utxos
       )
 
-      console.log(
-        'dlc-lib/contractUpdater.ts/toAcceptContract/UTXOs for amount: ',
-        outUtxos
-      )
-
       acceptParams = await this.getPartyInputs(
         outUtxos,
         ownCollateral,
@@ -225,20 +211,12 @@ export class ContractUpdater {
         btcNetwork
       )
 
-      console.log(
-        'dlc-lib/contractUpdater.ts/toAcceptContract/Accept Params: ',
-        acceptParams
-      )
-
       for (const input of acceptParams.inputs) {
         const prevTx = await this.blockchain.getTransaction(
           input.outpoint.txid,
           btcNetwork
         )
-        console.log(
-          'dlc-lib/contractUpdater.ts/toAcceptContract/prevTx: ',
-          prevTx
-        )
+
         acceptFundingInputsInfo.push({
           inputSerialId: input.serialId,
           prevTx,
@@ -248,10 +226,6 @@ export class ContractUpdater {
           redeemScript: input.redeemScript,
         })
       }
-      console.log(
-        'dlc-lib/contractUpdater.ts/toAcceptContract/acceptFundingInputsInfo: ',
-        acceptFundingInputsInfo
-      )
     } catch (error) {
       throw error
     }
@@ -262,10 +236,6 @@ export class ContractUpdater {
       contract,
       acceptParams,
       payouts
-    )
-    console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract/dlcTransactions: ',
-      dlcTransactions
     )
 
     const fundTxHex = dlcTransactions.fundTxHex
@@ -292,24 +262,7 @@ export class ContractUpdater {
       sigParams
     )
 
-    console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract/Transaction.fromHex(dlcTransactions.refundTxHex): ',
-      Transaction.fromHex(dlcTransactions.refundTxHex)
-    )
-    console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract/sigParams.fundTxOutAmount: ',
-      sigParams.fundTxOutAmount
-    )
-    console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract/fundingScriptPubkey: ',
-      fundingScriptPubkey
-    )
-    console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract/btcPrivateKey',
-      btcPrivateKey
-    )
-
-    const acceptRefundSignature = await this.signer.getDerTxSignatureFromPubkey(
+    const acceptRefundSignature = await this.signer.getDerTxSignatureFromPrivateKey(
       Transaction.fromHex(dlcTransactions.refundTxHex),
       0,
       sigParams.fundTxOutAmount,
@@ -317,18 +270,11 @@ export class ContractUpdater {
       btcPrivateKey
     )
 
-    console.log(
-      'dlc-lib/contractUpdater.ts/toAcceptContract | acceptRefundSignature: ',
-      acceptRefundSignature
-    )
-
     const id = computeContractId(
       fundTxId,
       dlcTransactions.fundVout,
       contract.temporaryContractId
     )
-
-    console.log('dlc-lib/contractUpdater.ts/toAcceptContract | id: ', id)
 
     return {
       ...contract,
@@ -372,10 +318,6 @@ export class ContractUpdater {
     const stringifiedAcceptMessage = {
       acceptMessage: JSON.stringify(acceptMessage),
     }
-    console.log(
-      'dlc-lib/contractUpdater.ts/acceptMessage: ',
-      acceptMessage
-    )
 
     try {
       const response = await fetch(`${counterpartyWalletURL}/offer/accept`, {
@@ -390,10 +332,7 @@ export class ContractUpdater {
       }
 
       const acceptMessageResponse = await response.json()
-      console.log(
-        'dlc-lib/contractUpdater.ts/acceptMessageResponse: ',
-        acceptMessageResponse
-      )
+
       return JSON.stringify(acceptMessageResponse)
     } catch (error) {
       throw new DlcError(`Fetch Error: ${error}`)
@@ -414,8 +353,6 @@ export class ContractUpdater {
     )
 
     const fundTx = Transaction.fromHex(fundTxHex)
-
-    console.log('dlc-lib/contractUpdater/toBroadcast/fundTx: ', fundTx)
 
     for (let i = 0; i < contract.acceptParams.inputs.length; i++) {
       const input = contract.acceptParams.inputs[i]

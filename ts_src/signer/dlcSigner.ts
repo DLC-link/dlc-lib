@@ -35,7 +35,7 @@ export class DlcSigner implements Signer {
     ]
   }
 
-  async getDerTxSignatureFromPubkey(
+  async getDerTxSignatureFromPrivateKey(
     tx: Transaction,
     inputIndex: number,
     inputAmount: number,
@@ -47,10 +47,6 @@ export class DlcSigner implements Signer {
       Buffer.from(outputScript, 'hex'),
       inputAmount,
       0x01
-    )
-    console.log(
-      'dlc-lib/dlcSigner.ts/getDerTxSignatureFromPubkey/btcPrivateKey: ',
-      btcPrivateKey
     )
 
     const ecpair = ECPair.fromPrivateKey(Buffer.from(btcPrivateKey, 'hex'))

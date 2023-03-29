@@ -68,8 +68,6 @@ export class DlcManager {
       ContractState.Accepted,
     ])) as AcceptedContract
 
-    console.log('dlc-lib/dlcManager.ts/counterpartyWalletURL: ', counterpartyWalletURL)
-
     const signMessage = JSON.parse(
       await this._contractUpdater.toWriteAcceptMessage(
         counterpartyWalletURL,

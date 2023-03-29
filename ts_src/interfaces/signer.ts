@@ -4,7 +4,7 @@ import { Transaction } from 'bitcoinjs-lib'
 export interface Signer {
   // Returns a DER encoded signature for the specified input using the private
   // key associated with the given public key.
-  getDerTxSignatureFromPubkey(
+  getDerTxSignatureFromPrivateKey(
     tx: Transaction,
     inputIndex: number,
     inputAmount: number,
