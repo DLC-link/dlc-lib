@@ -2,10 +2,11 @@ export { ElectrsBlockchain } from './blockchain'
 export { DlcManager, ContractUpdater } from './controller'
 export {
   Blockchain,
-  Wallet,
+  Signer,
   ContractQuery,
   ContractRepository,
 } from './interfaces'
+export { DlcSigner } from './signer'
 
 export { EnumerationOutcome } from './models'
 export { PartyParams } from './models'
@@ -42,10 +43,7 @@ export { EnumeratedContractDescriptor } from './models'
 export { isEnumeratedContractDescriptor } from './models'
 export { isNumericOutcomeContractDescriptor } from './models'
 export { ContractState } from './models'
-export { WalletStorage } from './interfaces'
 export { offerMessageFromJson, toAcceptMessage } from './models'
 
 export { ErrorCode } from './storage'
 export { RepositoryError } from './storage'
-
-export { BitcoinJSWallet } from './wallet/bitcoinJsWallet'

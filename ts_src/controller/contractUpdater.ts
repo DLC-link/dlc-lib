@@ -10,11 +10,11 @@ import {
   AcceptedContract,
   BroadcastContract,
   FailedContract,
-  isContractOfState,
   OfferedContract,
   RejectedContract,
   SignedContract,
 } from '../models/contract'
+import { toAcceptMessage } from '../models/contract/acceptedContract'
 import { PartyParams } from '../models/partyParams'
 import { RangeInfo } from '../models/rangeInfo'
 import {
@@ -38,20 +38,23 @@ import {
   isNumericOutcomeContractDescriptor,
   NumericOutcomeContractDescriptor,
 } from '../models/messages/contract'
-import { Transaction, address, script } from 'bitcoinjs-lib'
+import { Transaction, address, script, Network, networks } from 'bitcoinjs-lib'
 import { ECPairFactory, ECPairAPI } from 'ecpair'
 import { computeContractId } from '../models/contract/acceptedContract'
 import { getSerialId } from '../utils/random'
 import { FundingSignature } from '../models/messages/signMessage'
 import { SerialIdOrderer } from '../utils/serialIdOrderer'
 import { Blockchain } from '../interfaces/blockchain'
-import { Wallet } from '../interfaces/wallet'
+import { Signer } from '../interfaces/signer'
 import {
   isDigitDecompositionEventDescriptor,
   isEnumeratedEventDescriptor,
   OracleInfo,
 } from '../models/oracle'
 import * as tinysecp256k1 from 'tiny-secp256k1'
+import coinselect from 'coinselect'
+import { NetworkType } from '../types/networkTypes'
+import { bitcoin, testnet } from 'bitcoinjs-lib/src/networks'
 
 const cfddlcjs = cfddlcjsInit.getCfddlc()
 
@@ -66,24 +69,53 @@ interface SigParams {
   acceptParams: PartyParams
 }
 
-const notEnoughUtxoErrorMessage = 'Not enough UTXO for collateral and fees.'
-
 export class ContractUpdater {
-  constructor(readonly wallet: Wallet, readonly blockchain: Blockchain) {}
+  constructor(readonly signer: Signer, readonly blockchain: Blockchain) {}
+
+  private getNetworkData(network: NetworkType): Network {
+    switch (network) {
+      case 'Mainnet':
+        return bitcoin
+      case 'Testnet':
+        return testnet
+      // case 'BlockCypher':
+      //   const blockcypher = {
+      //     test: {
+      //       messagePrefix: '\x18Bitcoin Signed Message:\n',
+      //       bech32: 'bc',
+      //       bip32: {
+      //         public: 0x0488b21e,
+      //         private: 0x0488ade4,
+      //       },
+      //       pubKeyHash: 0x1b,
+      //       scriptHash: 0x1f,
+      //       wif: 0x49,
+      //     },
+      //   }
+      //   return blockcypher
+      default:
+        return bitcoin
+    }
+  }
 
   private async getPartyInputs(
     utxos: ReadonlyArray<Utxo>,
-    collateral: number
+    collateral: number,
+    btcAddress: string,
+    btcPublicKey: string,
+    btcNetwork: NetworkType
   ): Promise<PartyParams> {
-    const fundPubkey = await this.wallet.getNewPublicKey()
-    const changeAddress = await this.wallet.getNewAddress()
-    const payoutAddress = await this.wallet.getNewAddress()
-    // TODO(tibo): get network param from wallet
+    const fundPubkey = btcPublicKey
+    const changeAddress = btcAddress
+    const payoutAddress = btcAddress
+    const networkData = this.getNetworkData(btcNetwork)
+
     const changeScriptPubkey = address
-      .toOutputScript(changeAddress, this.wallet.getNetwork())
+      .toOutputScript(changeAddress, networkData)
       .toString('hex')
+
     const payoutScriptPubkey = address
-      .toOutputScript(payoutAddress, this.wallet.getNetwork())
+      .toOutputScript(payoutAddress, networkData)
       .toString('hex')
 
     let inputAmount = 0
@@ -116,24 +148,75 @@ export class ContractUpdater {
     }
   }
 
-  async toAcceptContract(contract: OfferedContract): Promise<AcceptedContract> {
+  private async getUtxosForAmount(
+    amount: number,
+    feeRatePerVByte: number,
+    utxos: Utxo[]
+  ): Promise<Utxo[]> {
+    const { inputs } = coinselect(
+      utxos.map((x) => {
+        return { ...x, value: x.amount }
+      }),
+      [{ value: amount }],
+      feeRatePerVByte
+    )
+
+    if (!inputs || inputs.length == 0) {
+      throw new DlcError('Not enough UTXOs for amount.')
+    }
+
+    const outUtxos: Utxo[] = []
+
+    for (const input of inputs) {
+      const i = utxos.findIndex((x) => x.amount == input.value)
+      outUtxos.push({
+        ...utxos.splice(i, 1)[0],
+        reserved: true,
+      })
+    }
+
+    return outUtxos
+  }
+
+  async toAcceptContract(
+    contract: OfferedContract,
+    btcAddress: string,
+    btcPublicKey: string,
+    btcPrivateKey: string,
+    btcNetwork: NetworkType
+  ): Promise<AcceptedContract> {
     let acceptParams = undefined
     const acceptFundingInputsInfo: FundingInput[] = []
+
     try {
       const estimatedInputs = 2
-      let utxos = []
       const ownCollateral =
         contract.contractInfo.totalCollateral - contract.offerParams.collateral
       const ownFee = getOwnFee(contract.feeRatePerVByte, estimatedInputs)
-      utxos = await this.wallet.getUtxosForAmount(
+      const utxos = await this.blockchain.getUtxosForAddress(
+        btcAddress,
+        btcNetwork
+      )
+      const outUtxos = await this.getUtxosForAmount(
         ownCollateral + ownFee,
-        contract.feeRatePerVByte
+        contract.feeRatePerVByte,
+        utxos
       )
 
-      acceptParams = await this.getPartyInputs(utxos, ownCollateral)
+      acceptParams = await this.getPartyInputs(
+        outUtxos,
+        ownCollateral,
+        btcAddress,
+        btcPublicKey,
+        btcNetwork
+      )
 
       for (const input of acceptParams.inputs) {
-        const prevTx = await this.blockchain.getTransaction(input.outpoint.txid)
+        const prevTx = await this.blockchain.getTransaction(
+          input.outpoint.txid,
+          btcNetwork
+        )
+
         acceptFundingInputsInfo.push({
           inputSerialId: input.serialId,
           prevTx,
@@ -143,8 +226,8 @@ export class ContractUpdater {
           redeemScript: input.redeemScript,
         })
       }
-    } catch (e) {
-      throw new DlcError(notEnoughUtxoErrorMessage)
+    } catch (error) {
+      throw error
     }
 
     const payouts: Payout[] = getContractPayouts(contract.contractInfo)
@@ -164,9 +247,8 @@ export class ContractUpdater {
     const cetsHex = dlcTransactions.cetsHex
     const fundingScriptPubkey = dlcTransactions.fundingScriptPubkey
 
-    const fundPrivkey = await this.wallet.getPrivateKeyForPublicKey(
-      acceptParams.fundPubkey
-    )
+    const fundPrivkey = btcPrivateKey
+
     const sigParams: SigParams = {
       fundTxId,
       fundTxOutAmount,
@@ -180,12 +262,12 @@ export class ContractUpdater {
       sigParams
     )
 
-    const acceptRefundSignature = await this.wallet.getDerTxSignatureFromPubkey(
+    const acceptRefundSignature = await this.signer.getDerTxSignatureFromPrivateKey(
       Transaction.fromHex(dlcTransactions.refundTxHex),
       0,
       sigParams.fundTxOutAmount,
-      acceptParams.fundPubkey,
-      fundingScriptPubkey
+      fundingScriptPubkey,
+      btcPrivateKey
     )
 
     const id = computeContractId(
@@ -228,7 +310,40 @@ export class ContractUpdater {
     }
   }
 
-  async toBroadcast(contract: SignedContract): Promise<BroadcastContract> {
+  async toWriteAcceptMessage(
+    counterpartyWalletURL: string,
+    contract: AcceptedContract
+  ): Promise<string> {
+    const acceptMessage = toAcceptMessage(contract)
+    const stringifiedAcceptMessage = {
+      acceptMessage: JSON.stringify(acceptMessage),
+    }
+
+    try {
+      const response = await fetch(`${counterpartyWalletURL}/offer/accept`, {
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PUT',
+        mode: 'cors',
+        body: JSON.stringify(stringifiedAcceptMessage),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`)
+      }
+
+      const acceptMessageResponse = await response.json()
+
+      return JSON.stringify(acceptMessageResponse)
+    } catch (error) {
+      throw new DlcError(`Fetch Error: ${error}`)
+    }
+  }
+
+  async toBroadcast(
+    contract: SignedContract,
+    btcPrivateKey: string,
+    btcNetwork: NetworkType
+  ): Promise<BroadcastContract> {
     const fundTxHex = contract.dlcTransactions.fund
 
     const inputOrderer = new SerialIdOrderer(
@@ -248,11 +363,11 @@ export class ContractUpdater {
         contract.acceptParams.inputs[i].serialId
       )
 
-      await this.wallet.signP2WPKHTxInput(
+      await this.signer.signP2WPKHTxInput(
         fundTx,
         index,
         input.amount,
-        input.address
+        btcPrivateKey
       )
     }
 
@@ -266,7 +381,7 @@ export class ContractUpdater {
       )
     }
 
-    await this.blockchain.sendRawTransaction(fundTx.toHex())
+    await this.blockchain.sendRawTransaction(fundTx.toHex(), btcNetwork)
 
     return { ...contract, state: ContractState.Broadcast }
   }
@@ -275,11 +390,6 @@ export class ContractUpdater {
     contract: OfferedContract | AcceptedContract | SignedContract,
     reason?: string
   ): Promise<RejectedContract> {
-    if (
-      isContractOfState(contract, ContractState.Accepted, ContractState.Signed)
-    ) {
-      await this.unlockUtxos(contract)
-    }
     return {
       ...contract,
       state: ContractState.Rejected,
@@ -291,21 +401,10 @@ export class ContractUpdater {
     contract: AcceptedContract | SignedContract,
     reason: string
   ): Promise<FailedContract> {
-    const states = [ContractState.Offered, ContractState.Accepted] as const
-    if (isContractOfState(contract, ...states)) await this.unlockUtxos(contract)
     return {
       ...contract,
       state: ContractState.Failed,
       reason,
-    }
-  }
-
-  private async unlockUtxos(
-    contract: AcceptedContract | SignedContract
-  ): Promise<void> {
-    const inputs = contract.acceptParams.inputs
-    for (const input of inputs) {
-      await this.wallet.unreserveUtxo(input.outpoint.txid, input.outpoint.vout)
     }
   }
 }
@@ -424,6 +523,7 @@ async function getDecompositionOutcomeInfo(
     descriptor,
     totalCollateral
   )
+
   const eventDescriptor =
     oracleInfo.oracleAnnouncement.oracleEvent.eventDescriptor
   if (!isDigitDecompositionEventDescriptor(eventDescriptor)) {

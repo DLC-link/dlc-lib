@@ -1,4 +1,4 @@
-import { Transaction } from 'bitcoinjs-lib'
+import { Network, Transaction } from 'bitcoinjs-lib'
 import { DlcError } from '../errors/dlcError'
 import { ContractRepository } from '../interfaces/repository'
 import {
@@ -12,6 +12,7 @@ import { AcceptedContract } from '../models/contract/acceptedContract'
 import { ContractState } from '../models/contract/contract'
 import { fromOfferMessage } from '../models/contract/offeredContract'
 import { OfferMessage, SignMessage } from '../models/messages'
+import { NetworkType } from '../types/networkTypes'
 import { ContractUpdater, verifyContractSignatures } from './contractUpdater'
 
 export class DlcManager {
@@ -33,12 +34,23 @@ export class DlcManager {
     return contract
   }
 
-  async acceptOffer(contractId: string): Promise<AcceptedContract> {
+  async acceptOffer(
+    contractId: string,
+    btcAddress: string,
+    btcPublicKey: string,
+    btcPrivateKey: string,
+    btcNetwork: NetworkType
+  ): Promise<AcceptedContract> {
     const offeredContract = (await this.tryGetContractOrThrow(contractId, [
       ContractState.Offered,
     ])) as OfferedContract
+
     const acceptedContract = await this._contractUpdater.toAcceptContract(
-      offeredContract
+      offeredContract,
+      btcAddress,
+      btcPublicKey,
+      btcPrivateKey,
+      btcNetwork
     )
 
     await this._dlcRepository.updateContract(acceptedContract)
@@ -46,21 +58,34 @@ export class DlcManager {
     return acceptedContract
   }
 
-  async onSignMessage(signMessage: SignMessage): Promise<BroadcastContract> {
-    const contract = (await this.tryGetContractOrThrow(signMessage.contractId, [
+  async onSignMessage(
+    contractId: string,
+    btcPrivateKey: string,
+    btcNetwork: NetworkType,
+    counterpartyWalletURL: string
+  ): Promise<BroadcastContract> {
+    const contract = (await this.tryGetContractOrThrow(contractId, [
       ContractState.Accepted,
     ])) as AcceptedContract
+
+    const signMessage = JSON.parse(
+      await this._contractUpdater.toWriteAcceptMessage(
+        counterpartyWalletURL,
+        contract
+      )
+    )
 
     const signedContract = await this._contractUpdater.toSignedContract(
       contract,
       signMessage.refundSignature,
       signMessage.cetAdaptorSignatures.ecdsaAdaptorSignatures.map(
-        (x) => x.signature
+        (x: any) => x.signature
       ),
       signMessage.fundingSignatures.fundingSignatures
     )
 
     const fundTx = Transaction.fromHex(signedContract.dlcTransactions.fund)
+
     const fundOutputValue =
       fundTx.outs[signedContract.dlcTransactions.fundOutputIndex].value
 
@@ -69,7 +94,9 @@ export class DlcManager {
     }
 
     const broadcastContract = await this._contractUpdater.toBroadcast(
-      signedContract
+      signedContract,
+      btcPrivateKey,
+      btcNetwork
     )
 
     await this._dlcRepository.updateContract(broadcastContract)
