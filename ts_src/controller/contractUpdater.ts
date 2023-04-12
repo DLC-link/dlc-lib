@@ -2,6 +2,7 @@ import {
   CreateCetAdaptorSignatureRequest,
   CreateDlcTransactionsRequest,
   CreateDlcTransactionsResponse,
+  PayoutRequest,
   VerifyCetAdaptorSignatureRequest,
 } from '../cfd-dlc-js-wasm'
 import cfddlcjsInit from '../cfd-dlc-js-wasm'
@@ -78,21 +79,6 @@ export class ContractUpdater {
         return bitcoin
       case 'Testnet':
         return testnet
-      // case 'BlockCypher':
-      //   const blockcypher = {
-      //     test: {
-      //       messagePrefix: '\x18Bitcoin Signed Message:\n',
-      //       bech32: 'bc',
-      //       bip32: {
-      //         public: 0x0488b21e,
-      //         private: 0x0488ade4,
-      //       },
-      //       pubKeyHash: 0x1b,
-      //       scriptHash: 0x1f,
-      //       wif: 0x49,
-      //     },
-      //   }
-      //   return blockcypher
       default:
         return bitcoin
     }
@@ -110,13 +96,22 @@ export class ContractUpdater {
     const payoutAddress = btcAddress
     const networkData = this.getNetworkData(btcNetwork)
 
-    const changeScriptPubkey = address
-      .toOutputScript(changeAddress, networkData)
-      .toString('hex')
+    let changeScriptPubkey = ''
+    let payoutScriptPubkey = ''
 
-    const payoutScriptPubkey = address
-      .toOutputScript(payoutAddress, networkData)
-      .toString('hex')
+    try {
+      changeScriptPubkey = address
+        .toOutputScript(changeAddress, networkData)
+        .toString('hex')
+
+      payoutScriptPubkey = address
+        .toOutputScript(payoutAddress, networkData)
+        .toString('hex')
+    } catch (error) {
+      throw new Error(
+        'Invalid bitcoin address, could not create script pubkey.'
+      )
+    }
 
     let inputAmount = 0
     const inputs: TxInputInfo[] = []
@@ -162,7 +157,7 @@ export class ContractUpdater {
     )
 
     if (!inputs || inputs.length == 0) {
-      throw new DlcError('Not enough UTXOs for amount.')
+      throw new Error('Not enough UTXOs for amount.')
     }
 
     const outUtxos: Utxo[] = []
@@ -185,52 +180,61 @@ export class ContractUpdater {
     btcPrivateKey: string,
     btcNetwork: NetworkType
   ): Promise<AcceptedContract> {
-    let acceptParams = undefined
     const acceptFundingInputsInfo: FundingInput[] = []
 
+    const ownCollateral =
+      contract.contractInfo.totalCollateral - contract.offerParams.collateral
+
+    const estimatedInputs = 2
+    const ownFee = getOwnFee(contract.feeRatePerVByte, estimatedInputs)
+
+    let utxos: Utxo[]
+
     try {
-      const estimatedInputs = 2
-      const ownCollateral =
-        contract.contractInfo.totalCollateral - contract.offerParams.collateral
-      const ownFee = getOwnFee(contract.feeRatePerVByte, estimatedInputs)
-      const utxos = await this.blockchain.getUtxosForAddress(
-        btcAddress,
-        btcNetwork
-      )
-      const outUtxos = await this.getUtxosForAmount(
-        ownCollateral + ownFee,
-        contract.feeRatePerVByte,
-        utxos
-      )
+      utxos = await this.blockchain.getUtxosForAddress(btcAddress, btcNetwork)
+      if (utxos.length == 0) {
+        throw new Error('No UTXOs for address.')
+      }
+    } catch (error) {
+      throw new Error('Could not get UTXOs for address.')
+    }
 
-      acceptParams = await this.getPartyInputs(
-        outUtxos,
-        ownCollateral,
-        btcAddress,
-        btcPublicKey,
-        btcNetwork
-      )
+    const outUtxos = await this.getUtxosForAmount(
+      ownCollateral + ownFee,
+      contract.feeRatePerVByte,
+      utxos
+    )
 
-      for (const input of acceptParams.inputs) {
-        const prevTx = await this.blockchain.getTransaction(
+    const acceptParams = await this.getPartyInputs(
+      outUtxos,
+      ownCollateral,
+      btcAddress,
+      btcPublicKey,
+      btcNetwork
+    )
+
+    for (const input of acceptParams.inputs) {
+      let prevTx: string
+      try {
+        prevTx = await this.blockchain.getTransaction(
           input.outpoint.txid,
           btcNetwork
         )
-
-        acceptFundingInputsInfo.push({
-          inputSerialId: input.serialId,
-          prevTx,
-          prevTxVout: input.outpoint.vout,
-          sequence: 0xffffffff,
-          maxWitnessLen: 107,
-          redeemScript: input.redeemScript,
-        })
+      } catch (error) {
+        throw new Error(String(error))
       }
-    } catch (error) {
-      throw error
+
+      acceptFundingInputsInfo.push({
+        inputSerialId: input.serialId,
+        prevTx,
+        prevTxVout: input.outpoint.vout,
+        sequence: 0xffffffff,
+        maxWitnessLen: 107,
+        redeemScript: input.redeemScript,
+      })
     }
 
-    const payouts: Payout[] = getContractPayouts(contract.contractInfo)
+    const payouts = getContractPayouts(contract.contractInfo)
 
     const dlcTransactions = await createDlcTransactions(
       contract,
@@ -246,7 +250,6 @@ export class ContractUpdater {
     )
     const cetsHex = dlcTransactions.cetsHex
     const fundingScriptPubkey = dlcTransactions.fundingScriptPubkey
-
     const fundPrivkey = btcPrivateKey
 
     const sigParams: SigParams = {
@@ -257,18 +260,20 @@ export class ContractUpdater {
       fundPrivkey,
       offerParams: contract.offerParams,
     }
+
     const [outcomeInfo, acceptAdaptorSignatures] = await getOutcomesInfo(
       contract.contractInfo,
       sigParams
     )
 
-    const acceptRefundSignature = await this.signer.getDerTxSignatureFromPrivateKey(
-      Transaction.fromHex(dlcTransactions.refundTxHex),
-      0,
-      sigParams.fundTxOutAmount,
-      fundingScriptPubkey,
-      btcPrivateKey
-    )
+    const acceptRefundSignature =
+      await this.signer.getDerTxSignatureFromPrivateKey(
+        Transaction.fromHex(dlcTransactions.refundTxHex),
+        0,
+        sigParams.fundTxOutAmount,
+        fundingScriptPubkey,
+        btcPrivateKey
+      )
 
     const id = computeContractId(
       fundTxId,
@@ -484,7 +489,8 @@ async function createDlcTransactions(
   acceptParams: PartyParams,
   payouts: Payout[]
 ): Promise<CreateDlcTransactionsResponse> {
-  const dlcTxRequest: CreateDlcTransactionsRequest = {
+  let dlcTX: CreateDlcTransactionsResponse
+  const dlcTXRequest: CreateDlcTransactionsRequest = {
     payouts,
     offerFundPubkey: contract.offerParams.fundPubkey,
     offerPayoutScriptPubkey: contract.offerParams.payoutScriptPubkey,
@@ -507,7 +513,12 @@ async function createDlcTransactions(
     feeRate: contract.feeRatePerVByte,
     fundOutputSerialId: contract.fundOutputSerialId,
   }
-  return cfddlcjs.CreateDlcTransactions(dlcTxRequest)
+  try {
+    dlcTX = await cfddlcjs.CreateDlcTransactions(dlcTXRequest)
+  } catch (error: unknown) {
+    throw new Error(String(error))
+  }
+  return dlcTX
 }
 
 async function getDecompositionOutcomeInfo(

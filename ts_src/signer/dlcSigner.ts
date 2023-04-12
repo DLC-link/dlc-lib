@@ -19,7 +19,7 @@ export class DlcSigner implements Signer {
     const ecpair = ECPair.fromPrivateKey(Buffer.from(btcPrivateKey, 'hex'))
     const outputScript = payments.p2pkh({ pubkey: ecpair.publicKey }).output
     if (!outputScript) {
-      throw new UnexpectedError()
+      throw new Error('Could not create output script');
     }
     const hash = tx.hashForWitnessV0(
       inputIndex,
