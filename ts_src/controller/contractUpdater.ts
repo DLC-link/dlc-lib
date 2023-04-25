@@ -55,7 +55,7 @@ import {
 import * as tinysecp256k1 from 'tiny-secp256k1'
 import coinselect from 'coinselect'
 import { NetworkType } from '../types/networkTypes'
-import { bitcoin, testnet } from 'bitcoinjs-lib/src/networks'
+import { bitcoin, testnet, regtest } from 'bitcoinjs-lib/src/networks'
 
 const cfddlcjs = cfddlcjsInit.getCfddlc()
 
@@ -79,6 +79,8 @@ export class ContractUpdater {
         return bitcoin
       case 'Testnet':
         return testnet
+      case 'Regtest':
+        return regtest
       default:
         return bitcoin
     }
@@ -191,7 +193,7 @@ export class ContractUpdater {
     let utxos: Utxo[]
 
     try {
-      utxos = await this.blockchain.getUtxosForAddress(btcAddress, btcNetwork)
+      utxos = await this.blockchain.getUtxosForAddress(btcAddress)
       if (utxos.length == 0) {
         throw new Error('No UTXOs for address.')
       }
@@ -216,10 +218,7 @@ export class ContractUpdater {
     for (const input of acceptParams.inputs) {
       let prevTx: string
       try {
-        prevTx = await this.blockchain.getTransaction(
-          input.outpoint.txid,
-          btcNetwork
-        )
+        prevTx = await this.blockchain.getTransaction(input.outpoint.txid)
       } catch (error) {
         throw new Error(String(error))
       }
@@ -346,8 +345,7 @@ export class ContractUpdater {
 
   async toBroadcast(
     contract: SignedContract,
-    btcPrivateKey: string,
-    btcNetwork: NetworkType
+    btcPrivateKey: string
   ): Promise<BroadcastContract> {
     const fundTxHex = contract.dlcTransactions.fund
 
@@ -386,7 +384,7 @@ export class ContractUpdater {
       )
     }
 
-    await this.blockchain.sendRawTransaction(fundTx.toHex(), btcNetwork)
+    await this.blockchain.sendRawTransaction(fundTx.toHex())
 
     return { ...contract, state: ContractState.Broadcast }
   }

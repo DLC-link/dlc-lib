@@ -1,1 +1,1 @@
-export declare type NetworkType = 'Mainnet' | 'Testnet' | 'BlockCypher';
+export declare type NetworkType = 'Mainnet' | 'Testnet' | 'Regtest';

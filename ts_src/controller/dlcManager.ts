@@ -39,7 +39,7 @@ export class DlcManager {
     btcAddress: string,
     btcPublicKey: string,
     btcPrivateKey: string,
-    btcNetwork: NetworkType
+    btcNetwork: NetworkType,
   ): Promise<AcceptedContract> {
     const offeredContract = (await this.tryGetContractOrThrow(contractId, [
       ContractState.Offered,
@@ -50,7 +50,7 @@ export class DlcManager {
       btcAddress,
       btcPublicKey,
       btcPrivateKey,
-      btcNetwork
+      btcNetwork,
     )
 
     await this._dlcRepository.updateContract(acceptedContract)
@@ -61,7 +61,6 @@ export class DlcManager {
   async onSignMessage(
     contractId: string,
     btcPrivateKey: string,
-    btcNetwork: NetworkType,
     counterpartyWalletURL: string
   ): Promise<BroadcastContract> {
     const contract = (await this.tryGetContractOrThrow(contractId, [
@@ -95,8 +94,7 @@ export class DlcManager {
 
     const broadcastContract = await this._contractUpdater.toBroadcast(
       signedContract,
-      btcPrivateKey,
-      btcNetwork
+      btcPrivateKey
     )
 
     await this._dlcRepository.updateContract(broadcastContract)
